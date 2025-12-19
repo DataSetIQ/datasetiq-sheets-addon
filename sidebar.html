@@ -4,54 +4,89 @@
     <meta charset="UTF-8" />
     <title>DataSetIQ</title>
     <style>
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
       :root {
         color-scheme: light;
+        --bg: #f5f7fb;
+        --panel: #ffffff;
+        --border: #e4e8f1;
+        --text: #0f172a;
+        --muted: #4b5563;
+        --accent: #0b63f6;
+        --accent-soft: #dfeafe;
+        --positive: #12b76a;
+        --shadow: 0 12px 30px -14px rgba(15, 23, 42, 0.35);
+        --radius: 14px;
       }
       body {
-        font-family: Arial, sans-serif;
+        font-family: 'Space Grotesk', 'Segoe UI', system-ui, -apple-system, sans-serif;
         margin: 0;
         padding: 16px;
-        color: #0f172a;
+        max-width: 420px;
+        box-sizing: border-box;
+        background: radial-gradient(circle at 20% 20%, #e8f0ff 0, rgba(232,240,255,0) 30%), radial-gradient(circle at 90% 10%, #dff5ff 0, rgba(223,245,255,0) 25%), var(--bg);
+        color: var(--text);
       }
       h2 {
-        margin: 0 0 12px;
-        font-size: 18px;
+        margin: 0 0 6px;
+        font-size: 20px;
+        letter-spacing: -0.02em;
+      }
+      .brand-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 2px;
       }
       .card {
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
         padding: 14px;
         margin-bottom: 14px;
-        background: #f8fafc;
+        background: var(--panel);
         line-height: 1.5;
+        box-shadow: var(--shadow);
       }
       label {
         display: block;
         font-weight: 600;
         margin-bottom: 4px;
+        color: var(--text);
       }
       input[type='text'] {
         width: 100%;
-        padding: 8px;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
         box-sizing: border-box;
         margin-bottom: 8px;
+        background: #f9fbff;
+        font-size: 14px;
       }
       button {
         border: none;
-        border-radius: 6px;
-        background: #0f172a;
+        border-radius: 10px;
+        background: var(--text);
         color: #fff;
-        padding: 8px 12px;
+        padding: 10px 14px;
         cursor: pointer;
+        font-weight: 600;
+        letter-spacing: -0.01em;
       }
       button.secondary {
-        background: #e2e8f0;
-        color: #0f172a;
+        background: #eef1f6;
+        color: var(--text);
       }
       .muted {
-        color: #475569;
+        color: var(--muted);
         font-size: 12px;
         margin-top: 4px;
       }
@@ -59,20 +94,22 @@
         display: flex;
         gap: 8px;
         align-items: center;
+        flex-wrap: wrap;
       }
       .status {
         margin: 0 0 12px 0;
-        padding: 10px;
+        padding: 12px;
         font-size: 13px;
         line-height: 1.5;
         word-wrap: break-word;
         overflow-wrap: break-word;
         white-space: normal;
-        background: #f0fdf4;
-        border: 1px solid #86efac;
-        border-radius: 6px;
-        color: #166534;
-        font-weight: 500;
+        background: #ecfdf3;
+        border: 1px solid #baf0cf;
+        border-radius: 12px;
+        color: #05603a;
+        font-weight: 600;
+        box-shadow: var(--shadow);
       }
       .status.error {
         background: #fef2f2;
@@ -81,7 +118,7 @@
       }
       .quota {
         font-size: 12px;
-        color: #0f172a;
+        color: var(--text);
       }
       ul {
         padding: 0;
@@ -96,18 +133,20 @@
         flex-direction: column;
         gap: 8px;
         padding: 12px;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #f9fbff;
+        box-shadow: 0 6px 18px -12px rgba(15, 23, 42, 0.45);
       }
       .result-id {
-        font-weight: 600;
+        font-weight: 700;
         font-size: 13px;
         word-break: break-word;
+        color: var(--text);
       }
       .result-title {
         font-size: 12px;
-        color: #64748b;
+        color: #667085;
         line-height: 1.4;
         margin-top: 4px;
       }
@@ -124,82 +163,94 @@
         width: 100%;
       }
       .icon-btn {
-        background: #0f172a;
+        background: var(--text);
         color: #fff;
         border: none;
-        border-radius: 6px;
+        border-radius: 10px;
         padding: 0;
         font-size: 16px;
         cursor: pointer;
-        width: 42px;
-        height: 42px;
+        width: 44px;
+        height: 44px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
+        box-shadow: 0 6px 16px -10px rgba(15, 23, 42, 0.55);
       }
       .icon-btn:hover {
-        background: #1e293b;
+        background: #1b2437;
       }
       .insert-btn {
-        background: #0ea5e9;
+        background: var(--accent);
         color: #fff;
-        padding: 6px 10px;
+        padding: 8px 12px;
         font-size: 11px;
-        border-radius: 6px;
+        border-radius: 10px;
         white-space: nowrap;
         cursor: pointer;
-        font-weight: 500;
+        font-weight: 600;
       }
       .insert-btn:hover {
-        background: #0284c7;
+        background: #0a54d6;
       }
       .fav-btn {
-        background: #f59e0b;
+        background: linear-gradient(135deg, #f7b500 0%, #e69700 100%);
         color: #fff;
         padding: 6px 10px;
         font-size: 14px;
-        border-radius: 6px;
+        border-radius: 10px;
         cursor: pointer;
-        font-weight: 500;
+        font-weight: 600;
         border: none;
       }
       .fav-btn:hover {
-        background: #d97706;
+        filter: brightness(0.96);
       }
       .tabs {
-        display: flex;
-        gap: 4px;
-        border-bottom: 1px solid #e2e8f0;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+        gap: 8px;
+        padding: 10px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        margin-bottom: 12px;
       }
       .tab {
-        display: inline-flex;
+        display: flex;
+        flex-direction: column;
         align-items: center;
+        justify-content: center;
         gap: 6px;
-        background: transparent;
-        color: #475569;
-        padding: 8px 12px;
+        background: #f6f8fc;
+        color: #465467;
+        padding: 10px 6px;
         font-size: 12px;
-        border: none;
-        border-bottom: 2px solid transparent;
+        border: 1px solid var(--border);
+        border-radius: 12px;
         cursor: pointer;
-        font-weight: 500;
+        font-weight: 600;
+        transition: all 0.2s ease;
       }
       .tab.active {
-        color: #0f172a;
-        border-bottom-color: #0ea5e9;
+        color: var(--text);
+        border-color: var(--accent);
+        box-shadow: 0 8px 16px -12px rgba(11, 99, 246, 0.6);
+        background: #eef3ff;
       }
       .tab:hover {
-        background: #f8fafc;
+        background: #edf1f7;
       }
       .preview-btn {
         background: #8b5cf6;
         color: #fff;
         padding: 6px 10px;
         font-size: 14px;
-        border-radius: 6px;
+        border-radius: 8px;
         cursor: pointer;
-        font-weight: 500;
+        font-weight: 600;
         border: none;
       }
       .preview-btn:hover {
@@ -221,13 +272,14 @@
         gap: 8px;
       }
       .result-buttons.compact-icons button {
-        width: 42px;
-        height: 42px;
+        width: 44px;
+        height: 44px;
         padding: 0;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         font-size: 16px;
+        border-radius: 10px;
       }
     </style>
     <script>

@@ -290,10 +290,63 @@ function getPreviewData(seriesId: string) {
     return { error: latestErr || metaErr };
   }
   
+  // Check if this is a metadata-only dataset
+  const isMetadataOnly = latestRes?.status === 'metadata_only';
+  const isPending = latestRes?.status === 'ingestion_pending';
+  
   return {
     latest: latestRes?.scalar,
     meta: metaRes?.dataset,
+    isMetadataOnly,
+    isPending,
+    statusMessage: latestRes?.message
   };
+}
+
+/**
+ * Request full ingestion for a metadata-only dataset
+ */
+function requestFullIngestion(seriesId: string) {
+  const key = getApiKey();
+  const url = `${BASE_URL}/api/datasets/${encodeURIComponent(seriesId)}/fetch`;
+  
+  const request: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions = {
+    method: 'post',
+    muteHttpExceptions: true,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(key ? { 'Authorization': `Bearer ${key}` } : {})
+    },
+    payload: JSON.stringify({})
+  };
+  
+  try {
+    const response = UrlFetchApp.fetch(url, request);
+    const status = response.getResponseCode();
+    const bodyText = response.getContentText();
+    const data = parseJson(bodyText);
+    
+    if (status === 401 || data.requiresAuth) {
+      return { requiresAuth: true, error: 'Authentication required' };
+    }
+    
+    if (status === 429 || data.upgradeToPro) {
+      return { 
+        upgradeToPro: true, 
+        limit: data.limit || 100,
+        remaining: data.remaining || 0,
+        resetAt: data.resetAt
+      };
+    }
+    
+    if (status >= 200 && status < 300 && data.success) {
+      return { success: true, message: 'Dataset ingestion started' };
+    }
+    
+    return { error: data.error || data.message || 'Failed to request ingestion' };
+  } catch (err: any) {
+    return { error: err.message || 'Network error' };
+  }
 }
 
 /**
@@ -439,7 +492,12 @@ function fetchSeries(
       } else if (body.data) {
         // Data response - transform [{date, value}] to [[date, value]]
         const dataArray = body.data.map((obs: any) => [obs.date, obs.value]);
-        transformedResponse = { data: dataArray, seriesId: body.seriesId };
+        transformedResponse = { 
+          data: dataArray, 
+          seriesId: body.seriesId,
+          status: body.status,
+          message: body.message
+        };
         
         // Handle scalar modes (latest, value, yoy)
         if (mode === 'latest' && dataArray.length > 0) {

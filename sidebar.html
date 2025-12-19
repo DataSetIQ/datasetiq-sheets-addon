@@ -214,6 +214,32 @@
         }
         
         let html = '';
+        
+        // Metadata-only notice
+        if (previewData.isMetadataOnly) {
+          html += `<div style="margin-bottom: 12px; padding: 10px; background: #fef3c7; border-radius: 6px; border: 1px solid #fbbf24;">
+            <strong style="color: #92400e; display: block; margin-bottom: 4px;">📊 Metadata Only</strong>
+            <p style="font-size: 12px; color: #78350f; margin: 4px 0;">
+              This dataset hasn't been fully ingested yet. Click below to fetch the complete time-series data.
+            </p>
+            <button 
+              onclick="requestFullIngestion('${previewSeries}')"
+              style="margin-top: 8px; width: 100%; padding: 8px; background: #f59e0b; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+              🚀 Fetch Full Dataset
+            </button>
+          </div>`;
+        }
+        
+        // Ingestion pending notice
+        if (previewData.isPending) {
+          html += `<div style="margin-bottom: 12px; padding: 10px; background: #dbeafe; border-radius: 6px; border: 1px solid #3b82f6;">
+            <strong style="color: #1e3a8a; display: block; margin-bottom: 4px;">⏳ Ingestion In Progress</strong>
+            <p style="font-size: 12px; color: #1e40af; margin: 0;">
+              ${previewData.statusMessage || 'Full dataset is being fetched. This usually takes 1-2 minutes. Please check back shortly.'}
+            </p>
+          </div>`;
+        }
+        
         html += `<div class="preview-item"><strong>Latest Value:</strong> ${previewData.latest ?? 'N/A'}</div>`;
         if (previewData.meta?.title) html += `<div class="preview-item"><strong>Title:</strong> ${previewData.meta.title}</div>`;
         if (previewData.meta?.frequency) html += `<div class="preview-item"><strong>Frequency:</strong> ${previewData.meta.frequency}</div>`;
@@ -226,6 +252,28 @@
         </div>`;
         
         body.innerHTML = html;
+      }
+      
+      function requestFullIngestion(seriesId) {
+        showStatus('Requesting full dataset ingestion...');
+        google.script.run
+          .withSuccessHandler((result) => {
+            if (result.requiresAuth) {
+              showError('⚠️ Authentication required. Visit datasetiq.com to sign up for full data access.');
+            } else if (result.upgradeToPro) {
+              showError(`⚠️ Monthly limit reached (${result.remaining || 0}/${result.limit || 100}). Upgrade to Pro for unlimited access.`);
+            } else if (result.success) {
+              showStatus('✅ Dataset ingestion started! Data will be available in 1-2 minutes.');
+              // Update preview to show pending status
+              previewData.isPending = true;
+              previewData.statusMessage = 'Dataset ingestion queued. Full data will be available shortly.';
+              renderPreview();
+            } else {
+              showError(`⚠️ ${result.error || 'Failed to queue ingestion'}`);
+            }
+          })
+          .withFailureHandler(showError)
+          .requestFullIngestion(seriesId);
       }
       
       function loadSources() {

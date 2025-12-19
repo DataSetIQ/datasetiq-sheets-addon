@@ -110,12 +110,155 @@
       .insert-btn:hover {
         background: #0284c7;
       }
+      .fav-btn {
+        background: #f59e0b;
+        color: #fff;
+        padding: 6px 10px;
+        font-size: 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        border: none;
+      }
+      .fav-btn:hover {
+        background: #d97706;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      .tab {
+        background: transparent;
+        color: #475569;
+        padding: 8px 12px;
+        font-size: 12px;
+        border: none;
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .tab.active {
+        color: #0f172a;
+        border-bottom-color: #0ea5e9;
+      }
+      .tab:hover {
+        background: #f8fafc;
+      }
+      .preview-btn {
+        background: #8b5cf6;
+        color: #fff;
+        padding: 6px 10px;
+        font-size: 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        border: none;
+      }
+      .preview-btn:hover {
+        background: #7c3aed;
+      }
+      .preview-item {
+        margin-bottom: 10px;
+        font-size: 13px;
+      }
+      .preview-item strong {
+        color: #475569;
+        display: block;
+        margin-bottom: 4px;
+        font-size: 11px;
+      }
     </style>
     <script>
       let currentStatus = null;
+      let activeTab = 'search';
+      let favorites = [];
+      let recent = [];
+      let sources = [];
+      let browseResults = [];
+      let previewSeries = null;
+      let previewData = null;
 
       function onLoad() {
         refreshStatus();
+        loadFavoritesAndRecent();
+        loadSources();
+      }
+      
+      function showPreview(seriesId) {
+        previewSeries = seriesId;
+        document.getElementById('preview-modal').style.display = 'flex';
+        document.getElementById('preview-title').innerText = seriesId;
+        document.getElementById('preview-body').innerHTML = '<div class="muted">Loading...</div>';
+        
+        google.script.run
+          .withSuccessHandler((data) => {
+            previewData = data;
+            renderPreview();
+          })
+          .withFailureHandler(showError)
+          .getPreviewData(seriesId);
+      }
+      
+      function hidePreview() {
+        previewSeries = null;
+        previewData = null;
+        document.getElementById('preview-modal').style.display = 'none';
+      }
+      
+      function renderPreview() {
+        const body = document.getElementById('preview-body');
+        if (previewData?.error) {
+          body.innerHTML = `<div class="muted" style="color: #b91c1c;">${previewData.error}</div>`;
+          return;
+        }
+        
+        let html = '';
+        html += `<div class="preview-item"><strong>Latest Value:</strong> ${previewData.latest ?? 'N/A'}</div>`;
+        if (previewData.meta?.title) html += `<div class="preview-item"><strong>Title:</strong> ${previewData.meta.title}</div>`;
+        if (previewData.meta?.frequency) html += `<div class="preview-item"><strong>Frequency:</strong> ${previewData.meta.frequency}</div>`;
+        if (previewData.meta?.units) html += `<div class="preview-item"><strong>Units:</strong> ${previewData.meta.units}</div>`;
+        if (previewData.meta?.updated) html += `<div class="preview-item"><strong>Last Updated:</strong> ${previewData.meta.updated}</div>`;
+        
+        html += `<div style="margin-top: 16px; display: flex; gap: 8px;">
+          <button onclick="insertFormula('${previewSeries}', 'DSIQ'); hidePreview();">Insert Array</button>
+          <button class="secondary" onclick="insertFormula('${previewSeries}', 'DSIQ_LATEST'); hidePreview();">Insert Latest</button>
+        </div>`;
+        
+        body.innerHTML = html;
+      }
+      
+      function loadSources() {
+        google.script.run
+          .withSuccessHandler((srcs) => {
+            sources = srcs || [];
+            renderSourceDropdown();
+          })
+          .getSources();
+      }
+      
+      function loadFavoritesAndRecent() {
+        google.script.run
+          .withSuccessHandler((favs) => {
+            favorites = favs || [];
+            updateTabCounts();
+            if (activeTab === 'favorites') showFavorites();
+          })
+          .getFavorites();
+        google.script.run
+          .withSuccessHandler((rec) => {
+            recent = rec || [];
+            updateTabCounts();
+            if (activeTab === 'recent') showRecent();
+          })
+          .getRecent();
+      }
+      
+      function updateTabCounts() {
+        const favTab = document.getElementById('tab-favorites');
+        const recTab = document.getElementById('tab-recent');
+        if (favTab) favTab.innerText = `⭐ Favorites (${favorites.length})`;
+        if (recTab) recTab.innerText = `🕒 Recent (${recent.length})`;
       }
 
       function refreshStatus() {
@@ -198,10 +341,12 @@
           const buttons = document.createElement('div');
           buttons.className = 'result-buttons';
           
-          const btnArray = createInsertButton('\ud83d\udcca Array', item.id, 'DSIQ');
-          const btnLatest = createInsertButton('\ud83d\udcc8 Latest', item.id, 'DSIQ_LATEST');
-          const btnYoy = createInsertButton('\ud83d\udcc9 YoY', item.id, 'DSIQ_YOY');
+          const btnPreview = createPreviewButton(item.id);
+          const btnArray = createInsertButton('📊 Array', item.id, 'DSIQ');
+          const btnLatest = createInsertButton('📈 Latest', item.id, 'DSIQ_LATEST');
+          const btnYoy = createInsertButton('📉 YoY', item.id, 'DSIQ_YOY');
           
+          buttons.appendChild(btnPreview);
           buttons.appendChild(btnArray);
           buttons.appendChild(btnLatest);
           buttons.appendChild(btnYoy);
@@ -217,8 +362,19 @@
         const btn = document.createElement('button');
         btn.className = 'insert-btn';
         btn.innerText = label;
-        btn.title = `Insert ${functionName} formula`;
-        btn.onclick = () => insertFormula(seriesId, functionName);
+        btn.title = functionName ? `Insert ${functionName} formula` : '';
+        if (functionName) {
+          btn.onclick = () => insertFormula(seriesId, functionName);
+        }
+        return btn;
+      }
+      
+      function createPreviewButton(seriesId) {
+        const btn = document.createElement('button');
+        btn.className = 'preview-btn';
+        btn.innerText = '👁️';
+        btn.title = 'Preview data';
+        btn.onclick = () => showPreview(seriesId);
         return btn;
       }
       
@@ -226,10 +382,147 @@
         google.script.run
           .withSuccessHandler(() => {
             document.getElementById('status-banner').innerText = `Inserted ${functionName}(\"${seriesId}\")`;
+            loadFavoritesAndRecent();
             setTimeout(() => refreshStatus(), 2000);
           })
           .withFailureHandler(showError)
           .insertFormulaIntoActiveCell(seriesId, functionName);
+      }
+      
+      function toggleFavorite(seriesId) {
+        const isFavorite = favorites.includes(seriesId);
+        if (isFavorite) {
+          google.script.run
+            .withSuccessHandler(() => loadFavoritesAndRecent())
+            .removeFavorite(seriesId);
+        } else {
+          google.script.run
+            .withSuccessHandler(() => loadFavoritesAndRecent())
+            .addFavorite(seriesId);
+        }
+      }
+      
+      function switchTab(tab) {
+        activeTab = tab;
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + tab).classList.add('active');
+        
+        if (tab === 'search') showSearch();
+        else if (tab === 'favorites') showFavorites();
+        else if (tab === 'recent') showRecent();
+        else if (tab === 'browse') showBrowse();
+      }
+      
+      function showSearch() {
+        document.getElementById('search-view').style.display = 'block';
+        document.getElementById('favorites-view').style.display = 'none';
+        document.getElementById('recent-view').style.display = 'none';
+        document.getElementById('browse-view').style.display = 'none';
+      }
+      
+      function showFavorites() {
+        document.getElementById('search-view').style.display = 'none';
+        document.getElementById('favorites-view').style.display = 'block';
+        document.getElementById('recent-view').style.display = 'none';
+        document.getElementById('browse-view').style.display = 'none';
+        renderList(favorites, 'favorites-list', true);
+      }
+      
+      function showRecent() {
+        document.getElementById('search-view').style.display = 'none';
+        document.getElementById('favorites-view').style.display = 'none';
+        document.getElementById('recent-view').style.display = 'block';
+        document.getElementById('browse-view').style.display = 'none';
+        renderList(recent, 'recent-list', false);
+      }
+      
+      function showBrowse() {
+        document.getElementById('search-view').style.display = 'none';
+        document.getElementById('favorites-view').style.display = 'none';
+        document.getElementById('recent-view').style.display = 'none';
+        document.getElementById('browse-view').style.display = 'block';
+      }
+      
+      function renderSourceDropdown() {
+        const select = document.getElementById('source-select');
+        if (!select || !sources) return;
+        select.innerHTML = '<option value="">Choose a source...</option>';
+        sources.forEach(src => {
+          const opt = document.createElement('option');
+          opt.value = src.id;
+          opt.innerText = src.name;
+          select.appendChild(opt);
+        });
+      }
+      
+      function handleBrowse() {
+        const select = document.getElementById('source-select');
+        const source = select ? select.value : '';
+        if (!source) return;
+        
+        document.getElementById('browse-results').innerHTML = '<div class="muted">Loading...</div>';
+        google.script.run
+          .withSuccessHandler((results) => {
+            browseResults = results || [];
+            renderBrowseResults();
+          })
+          .withFailureHandler(showError)
+          .browseBySource(source);
+      }
+      
+      function renderBrowseResults() {
+        const container = document.getElementById('browse-results');
+        if (!browseResults || !browseResults.length) {
+          container.innerHTML = '<div class="muted">No results found.</div>';
+          return;
+        }
+        container.innerHTML = `<div class="muted" style="margin-bottom: 8px;">Showing ${browseResults.length} series</div>`;
+        renderList(browseResults.map(r => r.id), 'browse-results', false);
+      }
+      
+      function renderList(items, containerId, showRemove) {
+        const container = document.getElementById(containerId);
+        if (!items || !items.length) {
+          container.innerHTML = '<div class=\"muted\">No items yet.</div>';
+          return;
+        }
+        container.innerHTML = '';
+        const list = document.createElement('ul');
+        items.forEach((id) => {
+          const li = document.createElement('li');
+          li.className = 'result-item';
+          
+          const info = document.createElement('div');
+          const idDiv = document.createElement('div');
+          idDiv.className = 'result-id';
+          idDiv.innerText = id;
+          info.appendChild(idDiv);
+          
+          const buttons = document.createElement('div');
+          buttons.className = 'result-buttons';
+          
+          const btnPreview = createPreviewButton(id);
+          
+          const isFav = favorites.includes(id);
+          const btnFav = createInsertButton(isFav ? '⭐' : '☆', id, null);
+          btnFav.className = 'fav-btn';
+          btnFav.onclick = () => toggleFavorite(id);
+          
+          const btnArray = createInsertButton('📊', id, 'DSIQ');
+          const btnLatest = createInsertButton('📈', id, 'DSIQ_LATEST');
+          const btnYoy = createInsertButton('📉', id, 'DSIQ_YOY');
+          
+          buttons.appendChild(btnPreview);
+          buttons.appendChild(btnFav);
+          buttons.appendChild(btnArray);
+          buttons.appendChild(btnLatest);
+          buttons.appendChild(btnYoy);
+          
+          li.appendChild(info);
+          li.appendChild(buttons);
+          list.appendChild(li);
+        });
+        container.appendChild(list);
       }
 
       function showError(err) {
@@ -253,12 +546,39 @@
         </div>
       </div>
       <div class="card">
-        <label for="search-box">Search Series</label>
-        <div class="row">
-          <input id="search-box" type="text" placeholder='Try "FRED-GDP"' />
-          <button onclick="search()">Search</button>
+        <div style="margin-bottom: 12px;">
+          <div class="tabs">
+            <button id="tab-search" class="tab active" onclick="switchTab('search')">🔍 Search</button>
+            <button id="tab-favorites" class="tab" onclick="switchTab('favorites')">⭐ Favorites (0)</button>
+            <button id="tab-recent" class="tab" onclick="switchTab('recent')">🕒 Recent (0)</button>
+            <button id="tab-browse" class="tab" onclick="switchTab('browse')">📚 Browse</button>
+          </div>
         </div>
-        <div id="search-results" class="muted"></div>
+        
+        <div id="search-view">
+          <label for="search-box">Search Series</label>
+          <div class="row">
+            <input id="search-box" type="text" placeholder='Try "FRED-GDP"' />
+            <button onclick="search()">Search</button>
+          </div>
+          <div id="search-results" class="muted"></div>
+        </div>
+        
+        <div id="favorites-view" style="display: none;">
+          <div id="favorites-list" class="muted">No favorites yet.</div>
+        </div>
+        
+        <div id="recent-view" style="display: none;">
+          <div id="recent-list" class="muted">No recent series yet.</div>
+        </div>
+        
+        <div id="browse-view" style="display: none;">
+          <label for="source-select" style="display: block; font-weight: 600; margin-bottom: 4px;">Select Data Source</label>
+          <select id="source-select" onchange="handleBrowse()" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 12px;">
+            <option value="">Choose a source...</option>
+          </select>
+          <div id="browse-results" class="muted">Select a source to browse series.</div>
+        </div>
       </div>
     </div>
 
@@ -273,6 +593,16 @@
         <div class="muted">
           First time? Use Extensions > DataSetIQ > Authorize to grant network access before using custom functions.
         </div>
+      </div>
+    </div>
+    
+    <div id="preview-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000;" onclick="hidePreview()">
+      <div style="background: #fff; border-radius: 8px; padding: 16px; max-width: 90%; max-height: 80%; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+          <h3 id="preview-title" style="margin: 0; font-size: 14px;"></h3>
+          <button onclick="hidePreview()" style="background: transparent; color: #475569; padding: 4px 8px; font-size: 16px; cursor: pointer; border: none; border-radius: 4px;">✕</button>
+        </div>
+        <div id="preview-body" style="padding: 8px 0;"></div>
       </div>
     </div>
   </body>

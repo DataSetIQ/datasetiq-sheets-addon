@@ -8,6 +8,8 @@ const ME_PATH = '/api/public/sheets/me';
 const SEARCH_PATH = '/api/public/search';
 const HEADER_ROW = ['Date', 'Value'];
 const API_KEY_PROP = 'DATASETIQ_API_KEY';
+const FAVORITES_PROP = 'DATASETIQ_FAVORITES';
+const RECENT_PROP = 'DATASETIQ_RECENT';
 
 type ErrorCode =
   | 'NO_KEY'
@@ -37,7 +39,21 @@ interface SearchResult {
   title: string;
   frequency?: string;
   units?: string;
+  source?: string;
 }
+
+const SOURCES = [
+  { id: 'FRED', name: 'FRED (Federal Reserve)' },
+  { id: 'BLS', name: 'BLS (Bureau of Labor Statistics)' },
+  { id: 'OECD', name: 'OECD' },
+  { id: 'EUROSTAT', name: 'Eurostat' },
+  { id: 'IMF', name: 'IMF' },
+  { id: 'WORLDBANK', name: 'World Bank' },
+  { id: 'ECB', name: 'ECB (European Central Bank)' },
+  { id: 'BOE', name: 'Bank of England' },
+  { id: 'CENSUS', name: 'US Census Bureau' },
+  { id: 'EIA', name: 'EIA (Energy Information)' },
+];
 
 interface SidebarStatus {
   connected: boolean;
@@ -223,7 +239,63 @@ function searchSeries(query: string): SearchResult[] {
     title: item.title,
     frequency: item.frequency,
     units: item.units,
+    source: item.source,
   }));
+}
+
+/**
+ * Sidebar helper: browse by source
+ */
+function browseBySource(source: string): SearchResult[] {
+  if (!source) return [];
+  const key = getApiKey();
+  const params: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions = {
+    method: 'get',
+    muteHttpExceptions: true,
+  };
+  if (key) {
+    params.headers = { Authorization: `Bearer ${key}` };
+  }
+  const url = `${BASE_URL}${SEARCH_PATH}?source=${encodeURIComponent(source)}&limit=50`;
+  const response = UrlFetchApp.fetch(url, params);
+  if (response.getResponseCode() >= 300) {
+    return [];
+  }
+  const parsed = parseJson(response.getContentText());
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed.map((item: any) => ({
+    id: item.id,
+    title: item.title,
+    frequency: item.frequency,
+    units: item.units,
+    source: item.source,
+  }));
+}
+
+/**
+ * Sidebar helper: get sources list
+ */
+function getSources() {
+  return SOURCES;
+}
+
+/**
+ * Sidebar helper: get preview data for a series
+ */
+function getPreviewData(seriesId: string) {
+  const { response: latestRes, errorMessage: latestErr } = fetchSeries(seriesId, { mode: 'latest' });
+  const { response: metaRes, errorMessage: metaErr } = fetchSeries(seriesId, { mode: 'meta' });
+  
+  if (latestErr || metaErr) {
+    return { error: latestErr || metaErr };
+  }
+  
+  return {
+    latest: latestRes?.scalar,
+    meta: metaRes?.meta,
+  };
 }
 
 /**
@@ -255,7 +327,53 @@ function insertFormulaIntoActiveCell(seriesId: string, functionName: string) {
   }
   
   cell.setFormula(formula);
+  addToRecent(seriesId);
   return { ok: true };
+}
+
+/**
+ * Favorites management
+ */
+function getFavorites(): string[] {
+  const stored = PropertiesService.getUserProperties().getProperty(FAVORITES_PROP);
+  return stored ? JSON.parse(stored) : [];
+}
+
+function addFavorite(seriesId: string) {
+  const favorites = getFavorites();
+  if (!favorites.includes(seriesId)) {
+    favorites.unshift(seriesId);
+    PropertiesService.getUserProperties().setProperty(
+      FAVORITES_PROP,
+      JSON.stringify(favorites.slice(0, 50))
+    );
+  }
+  return { ok: true };
+}
+
+function removeFavorite(seriesId: string) {
+  const favorites = getFavorites();
+  const filtered = favorites.filter((id) => id !== seriesId);
+  PropertiesService.getUserProperties().setProperty(FAVORITES_PROP, JSON.stringify(filtered));
+  return { ok: true };
+}
+
+/**
+ * Recent series management
+ */
+function getRecent(): string[] {
+  const stored = PropertiesService.getUserProperties().getProperty(RECENT_PROP);
+  return stored ? JSON.parse(stored) : [];
+}
+
+function addToRecent(seriesId: string) {
+  const recent = getRecent();
+  const filtered = recent.filter((id) => id !== seriesId);
+  filtered.unshift(seriesId);
+  PropertiesService.getUserProperties().setProperty(
+    RECENT_PROP,
+    JSON.stringify(filtered.slice(0, 20))
+  );
 }
 
 /**

@@ -58,8 +58,20 @@ const SOURCES = [
   { id: 'BOJ', name: 'BOJ (Bank of Japan)' },
 ];
 
+const PAID_PLANS = ['starter', 'premium', 'pro', 'team', 'enterprise'];
+
+const PREMIUM_FEATURES = {
+  FORMULA_BUILDER: 'Formula Builder Wizard',
+  RICH_METADATA: 'Full Metadata Panel',
+  MULTI_INSERT: 'Multi-Series Insert',
+  TEMPLATES: 'Templates Import/Export',
+};
+
+const TEMPLATES_PROP = 'DATASETIQ_TEMPLATES';
+
 interface SidebarStatus {
   connected: boolean;
+  isPaid: boolean;
   email?: string;
   plan?: string;
   quota?: { used: number; limit: number; reset: string };
@@ -197,7 +209,7 @@ function clearApiKey() {
 function getSidebarStatus(): SidebarStatus {
   const key = getApiKey();
   if (!key) {
-    return { connected: false };
+    return { connected: false, isPaid: false };
   }
   try {
     // Test API key with a minimal search request
@@ -208,17 +220,19 @@ function getSidebarStatus(): SidebarStatus {
     });
     const status = response.getResponseCode();
     if (status === 401 || status === 403) {
-      return { connected: false, error: 'Invalid API key. Please reconnect.' };
+      return { connected: false, isPaid: false, error: 'Invalid API key. Please reconnect.' };
     }
     if (status >= 200 && status < 300) {
+      // Valid API key = paid user with premium features
       return {
         connected: true,
-        status: 'connected',
+        isPaid: true,
+        status: '✅ Connected - Premium features unlocked',
       };
     }
-    return { connected: false, error: 'Unable to verify API key' };
+    return { connected: false, isPaid: false, error: 'Unable to verify API key' };
   } catch (err) {
-    return { connected: false, error: formatError(err) };
+    return { connected: false, isPaid: false, error: formatError(err) };
   }
 }
 
@@ -655,6 +669,158 @@ function formatError(err: any): string {
   return 'Unexpected error';
 }
 
+/**
+ * Check if user has premium access (valid API key)
+ */
+function checkPremiumAccess(): { allowed: boolean; message?: string } {
+  const key = getApiKey();
+  if (!key) {
+    return {
+      allowed: false,
+      message: '🔒 Premium features require an API key. Visit datasetiq.com/dashboard/api-keys to get started.',
+    };
+  }
+  // Valid API key = premium access
+  return { allowed: true };
+}
+
+/**
+ * Formula Builder: Generate formula with wizard
+ */
+function buildFormula(config: {
+  functionName: string;
+  seriesId: string;
+  freq?: string;
+  startDate?: string;
+}): { formula: string } {
+  const { functionName, seriesId, freq, startDate } = config;
+  
+  let formula = `=${functionName}("${seriesId}"`;
+  
+  if (functionName === 'DSIQ' || functionName === 'DSIQ_VALUE') {
+    if (freq) formula += `, "${freq}"`;
+    if (startDate) formula += `, "${startDate}"`;
+  }
+  
+  formula += ')';
+  
+  return { formula };
+}
+
+/**
+ * Insert formula into active cell
+ */
+function insertBuilderFormula(formula: string) {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const cell = sheet.getActiveCell();
+  cell.setFormula(formula);
+  return { ok: true };
+}
+
+/**
+ * Templates: Scan sheet for DSIQ formulas
+ */
+function scanFormulas(): { formulas: Array<{ cell: string; formula: string }> } {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const range = sheet.getDataRange();
+  const formulas = range.getFormulas();
+  const result: Array<{ cell: string; formula: string }> = [];
+  
+  for (let row = 0; row < formulas.length; row++) {
+    for (let col = 0; col < formulas[row].length; col++) {
+      const formula = formulas[row][col];
+      if (formula && typeof formula === 'string' && formula.includes('DSIQ')) {
+        const cell = sheet.getRange(row + 1, col + 1).getA1Notation();
+        result.push({ cell, formula });
+      }
+    }
+  }
+  
+  return { formulas: result };
+}
+
+/**
+ * Templates: Save template
+ */
+function saveTemplate(name: string, formulas: Array<{ cell: string; formula: string }>) {
+  const templates = getTemplates();
+  const newTemplate = {
+    id: Date.now().toString(),
+    name,
+    formulas,
+    createdAt: new Date().toISOString(),
+  };
+  
+  templates.unshift(newTemplate);
+  PropertiesService.getUserProperties().setProperty(
+    TEMPLATES_PROP,
+    JSON.stringify(templates.slice(0, 20))
+  );
+  
+  return { ok: true, template: newTemplate };
+}
+
+/**
+ * Templates: Get all templates
+ */
+function getTemplates(): any[] {
+  const stored = PropertiesService.getUserProperties().getProperty(TEMPLATES_PROP);
+  return stored ? JSON.parse(stored) : [];
+}
+
+/**
+ * Templates: Load template into sheet
+ */
+function loadTemplate(templateId: string) {
+  const templates = getTemplates();
+  const template = templates.find((t) => t.id === templateId);
+  
+  if (!template) {
+    return { ok: false, error: 'Template not found' };
+  }
+  
+  const sheet = SpreadsheetApp.getActiveSheet();
+  
+  template.formulas.forEach((item: { cell: string; formula: string }) => {
+    try {
+      const cell = sheet.getRange(item.cell);
+      cell.setFormula(item.formula);
+    } catch (err) {
+      // Continue on error
+    }
+  });
+  
+  return { ok: true };
+}
+
+/**
+ * Templates: Delete template
+ */
+function deleteTemplate(templateId: string) {
+  const templates = getTemplates();
+  const filtered = templates.filter((t) => t.id !== templateId);
+  PropertiesService.getUserProperties().setProperty(TEMPLATES_PROP, JSON.stringify(filtered));
+  return { ok: true };
+}
+
+/**
+ * Multi-insert: Insert multiple series at once
+ */
+function insertMultipleSeries(seriesIds: string[], functionName: string) {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const startCell = sheet.getActiveCell();
+  const startRow = startCell.getRow();
+  
+  seriesIds.forEach((seriesId, index) => {
+    const cell = sheet.getRange(startRow + index, startCell.getColumn());
+    const formula = `=${functionName}("${seriesId}")`;
+    cell.setFormula(formula);
+    addToRecent(seriesId);
+  });
+  
+  return { ok: true, count: seriesIds.length };
+}
+
 // Expose functions to HTML sandbox.
 function include(filename: string) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
@@ -674,6 +840,15 @@ g.saveApiKey = saveApiKey;
 g.clearApiKey = clearApiKey;
 g.getSidebarStatus = getSidebarStatus;
 g.searchSeries = searchSeries;
+g.checkPremiumAccess = checkPremiumAccess;
+g.buildFormula = buildFormula;
+g.insertBuilderFormula = insertBuilderFormula;
+g.scanFormulas = scanFormulas;
+g.saveTemplate = saveTemplate;
+g.getTemplates = getTemplates;
+g.loadTemplate = loadTemplate;
+g.deleteTemplate = deleteTemplate;
+g.insertMultipleSeries = insertMultipleSeries;
 g.include = include;
 
 // Export helpers for tests.

@@ -178,6 +178,12 @@
       let browseResults = [];
       let previewSeries = null;
       let previewData = null;
+      let isPaid = false;
+      let selectedForMultiInsert = [];
+      let builderStep = 1;
+      let builderConfig = { functionName: 'DSIQ', seriesId: '', freq: '', startDate: '' };
+      let templates = [];
+      let scannedFormulas = [];
 
       function onLoad() {
         refreshStatus();
@@ -318,13 +324,18 @@
 
       function renderStatus(status) {
         currentStatus = status;
+        isPaid = !!status.isPaid;
         const banner = document.getElementById('status-banner');
         banner.classList.remove('error');
         const connected = !!status.connected;
         document.getElementById('connected-view').style.display = connected ? 'block' : 'none';
         document.getElementById('disconnected-view').style.display = connected ? 'none' : 'block';
+        
+        // Update Builder and Templates tabs based on isPaid
+        updatePremiumTabs();
+        
         if (connected) {
-          banner.innerText = 'Connected';
+          banner.innerText = status.status || 'Connected';
           document.getElementById('user-email').innerText = status.email || 'Unknown user';
           document.getElementById('user-plan').innerText = status.plan || 'Unknown plan';
           const quota = status.quota;
@@ -336,6 +347,25 @@
           document.getElementById('status-detail').innerText = status.status || '';
         } else {
           banner.innerText = status.error || 'Enter your API key to connect your account.';
+        }
+      }
+      
+      function updatePremiumTabs() {
+        const builderTab = document.getElementById('tab-builder');
+        const templatesTab = document.getElementById('tab-templates');
+        
+        if (builderTab) {
+          builderTab.innerText = isPaid ? '🔧 Builder' : '🔒 Builder';
+          builderTab.disabled = !isPaid;
+          builderTab.style.opacity = isPaid ? '1' : '0.5';
+          builderTab.style.cursor = isPaid ? 'pointer' : 'not-allowed';
+        }
+        
+        if (templatesTab) {
+          templatesTab.innerText = isPaid ? '📁 Templates' : '🔒 Templates';
+          templatesTab.disabled = !isPaid;
+          templatesTab.style.opacity = isPaid ? '1' : '0.5';
+          templatesTab.style.cursor = isPaid ? 'pointer' : 'not-allowed';
         }
       }
 
@@ -376,6 +406,21 @@
           const li = document.createElement('li');
           li.className = 'result-item';
           
+          const leftSide = document.createElement('div');
+          leftSide.style.display = 'flex';
+          leftSide.style.alignItems = 'center';
+          leftSide.style.gap = '8px';
+          
+          // Multi-select checkbox for paid users
+          if (isPaid) {
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = selectedForMultiInsert.includes(item.id);
+            checkbox.onchange = () => toggleMultiSelect(item.id);
+            checkbox.style.cursor = 'pointer';
+            leftSide.appendChild(checkbox);
+          }
+          
           const info = document.createElement('div');
           const idDiv = document.createElement('div');
           idDiv.className = 'result-id';
@@ -385,6 +430,7 @@
           titleDiv.innerText = item.title || '';
           info.appendChild(idDiv);
           info.appendChild(titleDiv);
+          leftSide.appendChild(info);
           
           const buttons = document.createElement('div');
           buttons.className = 'result-buttons';
@@ -399,11 +445,18 @@
           buttons.appendChild(btnLatest);
           buttons.appendChild(btnYoy);
           
-          li.appendChild(info);
+          li.appendChild(leftSide);
           li.appendChild(buttons);
           list.appendChild(li);
         });
         container.appendChild(list);
+        
+        // Show multi-insert button if items selected
+        const multiBtn = document.getElementById('multi-insert-btn');
+        if (multiBtn) {
+          multiBtn.style.display = selectedForMultiInsert.length > 0 ? 'block' : 'none';
+          multiBtn.innerText = `Insert ${selectedForMultiInsert.length} Series`;
+        }
       }
       
       function createInsertButton(label, seriesId, functionName) {
@@ -451,6 +504,12 @@
       }
       
       function switchTab(tab) {
+        // Check premium access for Builder and Templates
+        if ((tab === 'builder' || tab === 'templates') && !isPaid) {
+          showStatus('🔒 Premium features require an API key. Visit datasetiq.com/dashboard/api-keys');
+          return;
+        }
+        
         activeTab = tab;
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.getElementById('tab-' + tab).classList.add('active');
@@ -459,6 +518,8 @@
         else if (tab === 'favorites') showFavorites();
         else if (tab === 'recent') showRecent();
         else if (tab === 'browse') showBrowse();
+        else if (tab === 'builder') showBuilder();
+        else if (tab === 'templates') showTemplates();
       }
       
       function showSearch() {
@@ -466,6 +527,8 @@
         document.getElementById('favorites-view').style.display = 'none';
         document.getElementById('recent-view').style.display = 'none';
         document.getElementById('browse-view').style.display = 'none';
+        document.getElementById('builder-view').style.display = 'none';
+        document.getElementById('templates-view').style.display = 'none';
       }
       
       function showFavorites() {
@@ -473,6 +536,8 @@
         document.getElementById('favorites-view').style.display = 'block';
         document.getElementById('recent-view').style.display = 'none';
         document.getElementById('browse-view').style.display = 'none';
+        document.getElementById('builder-view').style.display = 'none';
+        document.getElementById('templates-view').style.display = 'none';
         renderList(favorites, 'favorites-list', true);
       }
       
@@ -481,6 +546,8 @@
         document.getElementById('favorites-view').style.display = 'none';
         document.getElementById('recent-view').style.display = 'block';
         document.getElementById('browse-view').style.display = 'none';
+        document.getElementById('builder-view').style.display = 'none';
+        document.getElementById('templates-view').style.display = 'none';
         renderList(recent, 'recent-list', false);
       }
       
@@ -489,6 +556,253 @@
         document.getElementById('favorites-view').style.display = 'none';
         document.getElementById('recent-view').style.display = 'none';
         document.getElementById('browse-view').style.display = 'block';
+        document.getElementById('builder-view').style.display = 'none';
+        document.getElementById('templates-view').style.display = 'none';
+      }
+      
+      function showBuilder() {
+        document.getElementById('search-view').style.display = 'none';
+        document.getElementById('favorites-view').style.display = 'none';
+        document.getElementById('recent-view').style.display = 'none';
+        document.getElementById('browse-view').style.display = 'none';
+        document.getElementById('builder-view').style.display = 'block';
+        document.getElementById('templates-view').style.display = 'none';
+        builderStep = 1;
+        renderBuilderStep();
+      }
+      
+      function showTemplates() {
+        document.getElementById('search-view').style.display = 'none';
+        document.getElementById('favorites-view').style.display = 'none';
+        document.getElementById('recent-view').style.display = 'none';
+        document.getElementById('browse-view').style.display = 'none';
+        document.getElementById('builder-view').style.display = 'none';
+        document.getElementById('templates-view').style.display = 'block';
+        loadTemplatesList();
+      }
+      
+      function renderBuilderStep() {
+        const container = document.getElementById('builder-container');
+        if (builderStep === 1) {
+          container.innerHTML = `
+            <h4 style="margin: 8px 0;">Step 1: Choose Function</h4>
+            <select id="builder-function" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 12px;">
+              <option value="DSIQ">DSIQ (Full Array)</option>
+              <option value="DSIQ_LATEST">DSIQ_LATEST (Latest Value)</option>
+              <option value="DSIQ_VALUE">DSIQ_VALUE (Specific Date)</option>
+              <option value="DSIQ_YOY">DSIQ_YOY (Year-over-Year)</option>
+            </select>
+            <button onclick="builderNext()">Next →</button>
+          `;
+        } else if (builderStep === 2) {
+          container.innerHTML = `
+            <h4 style="margin: 8px 0;">Step 2: Enter Series ID</h4>
+            <input id="builder-series" type="text" placeholder="e.g., FRED-GDP" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 12px;" />
+            <div style="display: flex; gap: 8px;">
+              <button class="secondary" onclick="builderPrev()">← Back</button>
+              <button onclick="builderNext()">Next →</button>
+            </div>
+          `;
+        } else if (builderStep === 3) {
+          const needsOptions = builderConfig.functionName === 'DSIQ' || builderConfig.functionName === 'DSIQ_VALUE';
+          if (needsOptions) {
+            container.innerHTML = `
+              <h4 style="margin: 8px 0;">Step 3: Options (Optional)</h4>
+              <label>Frequency:</label>
+              <input id="builder-freq" type="text" placeholder="e.g., quarterly" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 12px;" />
+              <label>Start Date:</label>
+              <input id="builder-start" type="text" placeholder="e.g., 2020-01-01" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 12px;" />
+              <div style="display: flex; gap: 8px;">
+                <button class="secondary" onclick="builderPrev()">← Back</button>
+                <button onclick="builderFinish()">Insert Formula</button>
+              </div>
+            `;
+          } else {
+            builderFinish();
+          }
+        }
+      }
+      
+      function builderNext() {
+        if (builderStep === 1) {
+          const select = document.getElementById('builder-function');
+          builderConfig.functionName = select ? select.value : 'DSIQ';
+        } else if (builderStep === 2) {
+          const input = document.getElementById('builder-series');
+          builderConfig.seriesId = input ? input.value.trim() : '';
+          if (!builderConfig.seriesId) {
+            showStatus('⚠️ Please enter a series ID');
+            return;
+          }
+        }
+        builderStep++;
+        renderBuilderStep();
+      }
+      
+      function builderPrev() {
+        builderStep--;
+        renderBuilderStep();
+      }
+      
+      function builderFinish() {
+        if (builderStep === 3) {
+          const freqInput = document.getElementById('builder-freq');
+          const startInput = document.getElementById('builder-start');
+          if (freqInput) builderConfig.freq = freqInput.value.trim();
+          if (startInput) builderConfig.startDate = startInput.value.trim();
+        }
+        
+        google.script.run
+          .withSuccessHandler((result) => {
+            google.script.run
+              .withSuccessHandler(() => {
+                showStatus(`✅ Inserted ${builderConfig.functionName} formula`);
+                builderStep = 1;
+                builderConfig = { functionName: 'DSIQ', seriesId: '', freq: '', startDate: '' };
+                renderBuilderStep();
+              })
+              .withFailureHandler(showError)
+              .insertBuilderFormula(result.formula);
+          })
+          .withFailureHandler(showError)
+          .buildFormula(builderConfig);
+      }
+      
+      function loadTemplatesList() {
+        google.script.run
+          .withSuccessHandler((tmpl) => {
+            templates = tmpl || [];
+            renderTemplates();
+          })
+          .withFailureHandler(showError)
+          .getTemplates();
+      }
+      
+      function renderTemplates() {
+        const list = document.getElementById('templates-list');
+        if (!templates || !templates.length) {
+          list.innerHTML = '<div class="muted">No templates saved yet.</div>';
+          return;
+        }
+        
+        list.innerHTML = '';
+        const ul = document.createElement('ul');
+        templates.forEach((tmpl) => {
+          const li = document.createElement('li');
+          li.className = 'result-item';
+          li.style.display = 'flex';
+          li.style.justifyContent = 'space-between';
+          li.style.alignItems = 'center';
+          
+          const info = document.createElement('div');
+          const name = document.createElement('div');
+          name.className = 'result-id';
+          name.innerText = tmpl.name;
+          const meta = document.createElement('div');
+          meta.className = 'muted';
+          meta.innerText = `${tmpl.formulas.length} formulas`;
+          info.appendChild(name);
+          info.appendChild(meta);
+          
+          const buttons = document.createElement('div');
+          buttons.style.display = 'flex';
+          buttons.style.gap = '4px';
+          
+          const btnLoad = document.createElement('button');
+          btnLoad.className = 'insert-btn';
+          btnLoad.innerText = '📥 Load';
+          btnLoad.onclick = () => loadTemplateById(tmpl.id);
+          
+          const btnDel = document.createElement('button');
+          btnDel.className = 'secondary';
+          btnDel.innerText = '🗑️';
+          btnDel.style.padding = '6px 10px';
+          btnDel.style.fontSize = '11px';
+          btnDel.onclick = () => deleteTemplateById(tmpl.id);
+          
+          buttons.appendChild(btnLoad);
+          buttons.appendChild(btnDel);
+          
+          li.appendChild(info);
+          li.appendChild(buttons);
+          ul.appendChild(li);
+        });
+        list.appendChild(ul);
+      }
+      
+      function scanSheet() {
+        google.script.run
+          .withSuccessHandler((result) => {
+            scannedFormulas = result.formulas || [];
+            document.getElementById('scan-result').innerText = `Found ${scannedFormulas.length} DSIQ formulas`;
+            document.getElementById('save-template-section').style.display = scannedFormulas.length > 0 ? 'block' : 'none';
+          })
+          .withFailureHandler(showError)
+          .scanFormulas();
+      }
+      
+      function saveTemplateNow() {
+        const input = document.getElementById('template-name');
+        const name = input ? input.value.trim() : '';
+        if (!name) {
+          showStatus('⚠️ Please enter a template name');
+          return;
+        }
+        
+        google.script.run
+          .withSuccessHandler(() => {
+            showStatus(`✅ Template "${name}" saved`);
+            if (input) input.value = '';
+            scannedFormulas = [];
+            document.getElementById('scan-result').innerText = '';
+            document.getElementById('save-template-section').style.display = 'none';
+            loadTemplatesList();
+          })
+          .withFailureHandler(showError)
+          .saveTemplate(name, scannedFormulas);
+      }
+      
+      function loadTemplateById(id) {
+        google.script.run
+          .withSuccessHandler(() => {
+            showStatus('✅ Template loaded into sheet');
+          })
+          .withFailureHandler(showError)
+          .loadTemplate(id);
+      }
+      
+      function deleteTemplateById(id) {
+        google.script.run
+          .withSuccessHandler(() => {
+            showStatus('✅ Template deleted');
+            loadTemplatesList();
+          })
+          .withFailureHandler(showError)
+          .deleteTemplate(id);
+      }
+      
+      function toggleMultiSelect(seriesId) {
+        const index = selectedForMultiInsert.indexOf(seriesId);
+        if (index > -1) {
+          selectedForMultiInsert.splice(index, 1);
+        } else {
+          selectedForMultiInsert.push(seriesId);
+        }
+        document.getElementById('multi-insert-btn').innerText = `Insert ${selectedForMultiInsert.length} Series`;
+        document.getElementById('multi-insert-btn').style.display = selectedForMultiInsert.length > 0 ? 'block' : 'none';
+      }
+      
+      function insertMultiple() {
+        if (!selectedForMultiInsert.length) return;
+        
+        google.script.run
+          .withSuccessHandler((result) => {
+            showStatus(`✅ Inserted ${result.count} series`);
+            selectedForMultiInsert = [];
+            document.getElementById('multi-insert-btn').style.display = 'none';
+          })
+          .withFailureHandler(showError)
+          .insertMultipleSeries(selectedForMultiInsert, 'DSIQ_LATEST');
       }
       
       function renderSourceDropdown() {
@@ -578,6 +892,12 @@
         document.getElementById('status-banner').innerText = msg;
         document.getElementById('status-banner').classList.add('error');
       }
+      
+      function showStatus(msg) {
+        const banner = document.getElementById('status-banner');
+        banner.innerText = msg;
+        banner.classList.remove('error');
+      }
     </script>
   </head>
   <body onload="onLoad()">
@@ -600,6 +920,8 @@
             <button id="tab-favorites" class="tab" onclick="switchTab('favorites')">⭐ Favorites (0)</button>
             <button id="tab-recent" class="tab" onclick="switchTab('recent')">🕒 Recent (0)</button>
             <button id="tab-browse" class="tab" onclick="switchTab('browse')">📚 Browse</button>
+            <button id="tab-builder" class="tab" onclick="switchTab('builder')">🔒 Builder</button>
+            <button id="tab-templates" class="tab" onclick="switchTab('templates')">🔒 Templates</button>
           </div>
         </div>
         
@@ -609,6 +931,7 @@
             <input id="search-box" type="text" placeholder='Try "FRED-GDP"' />
             <button onclick="search()">Search</button>
           </div>
+          <button id="multi-insert-btn" onclick="insertMultiple()" style="display: none; width: 100%; margin: 8px 0; background: #10b981; color: #fff; padding: 10px; font-weight: 600;">Insert 0 Series</button>
           <div id="search-results" class="muted"></div>
         </div>
         
@@ -626,6 +949,31 @@
             <option value="">Choose a source...</option>
           </select>
           <div id="browse-results" class="muted">Select a source to browse series.</div>
+        
+        <div id="builder-view" style="display: none;">
+          <h3 style="margin: 8px 0 12px;">🔧 Formula Builder Wizard</h3>
+          <div id="builder-container"></div>
+        </div>
+        
+        <div id="templates-view" style="display: none;">
+          <h3 style="margin: 8px 0 12px;">📁 Templates</h3>
+          
+          <div style="margin-bottom: 16px;">
+            <button onclick="scanSheet()" style="width: 100%; margin-bottom: 8px;">🔍 Scan Current Sheet</button>
+            <div id="scan-result" class="muted"></div>
+            
+            <div id="save-template-section" style="display: none; margin-top: 12px;">
+              <label for="template-name">Template Name:</label>
+              <input id="template-name" type="text" placeholder="e.g., Q4 Report" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 8px;" />
+              <button onclick="saveTemplateNow()" style="width: 100%;">💾 Save Template</button>
+            </div>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
+          
+          <h4 style="margin: 8px 0;">Saved Templates</h4>
+          <div id="templates-list" class="muted">No templates saved yet.</div>
+        </div>
         </div>
       </div>
     </div>

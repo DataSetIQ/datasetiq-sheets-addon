@@ -4,16 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/Code.ts --bundle --minify --format=iife --target=es2019 --outfile=Code.js --global-name=DataSetIQ",
+    "build": "node swc-build.mjs",
+    "build:old": "cp src/Code.ts Code.gs && node clean-types.mjs",
     "lint": "eslint \"src/**/*.ts\" \"__tests__/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "format": "prettier --check \"{src,__tests__}/**/*.{ts,js}\""
   },
   "devDependencies": {
+    "@swc/core": "^1.15.7",
+    "@types/google-apps-script": "^1.0.67",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
-    "@types/google-apps-script": "^1.0.67",
     "esbuild": "^0.20.0",
     "eslint": "^8.56.0",
     "prettier": "^3.2.5",

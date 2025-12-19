@@ -227,6 +227,38 @@ function searchSeries(query: string): SearchResult[] {
 }
 
 /**
+ * Sidebar helper: insert formula into active cell.
+ */
+function insertFormulaIntoActiveCell(seriesId: string, functionName: string) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const cell = sheet.getActiveCell();
+  let formula = '';
+  
+  switch (functionName) {
+    case 'DSIQ':
+      formula = `=DSIQ("${seriesId}")`;
+      break;
+    case 'DSIQ_LATEST':
+      formula = `=DSIQ_LATEST("${seriesId}")`;
+      break;
+    case 'DSIQ_VALUE':
+      formula = `=DSIQ_VALUE("${seriesId}", TODAY())`;
+      break;
+    case 'DSIQ_YOY':
+      formula = `=DSIQ_YOY("${seriesId}")`;
+      break;
+    case 'DSIQ_META':
+      formula = `=DSIQ_META("${seriesId}", "title")`;
+      break;
+    default:
+      formula = `=DSIQ("${seriesId}")`;
+  }
+  
+  cell.setFormula(formula);
+  return { ok: true };
+}
+
+/**
  * Shared scalar handler with retry/backoff.
  */
 function handleScalar(seriesId: string, opts: { mode: string; date?: string }) {

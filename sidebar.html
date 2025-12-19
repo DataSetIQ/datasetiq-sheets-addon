@@ -71,11 +71,44 @@
         color: #0f172a;
       }
       ul {
-        padding-left: 16px;
+        padding: 0;
         margin: 8px 0;
+        list-style: none;
       }
       li {
-        margin-bottom: 4px;
+        margin-bottom: 8px;
+      }
+      .result-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background: #fff;
+      }
+      .result-id {
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .result-buttons {
+        display: flex;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+      .insert-btn {
+        background: #0ea5e9;
+        color: #fff;
+        padding: 6px 10px;
+        font-size: 11px;
+        border-radius: 6px;
+        white-space: nowrap;
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .insert-btn:hover {
+        background: #0284c7;
       }
     </style>
     <script>
@@ -150,10 +183,53 @@
         const list = document.createElement('ul');
         results.forEach((item) => {
           const li = document.createElement('li');
-          li.innerText = `${item.id} — ${item.title || ''}`;
+          li.className = 'result-item';
+          
+          const info = document.createElement('div');
+          const idDiv = document.createElement('div');
+          idDiv.className = 'result-id';
+          idDiv.innerText = item.id;
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'muted';
+          titleDiv.innerText = item.title || '';
+          info.appendChild(idDiv);
+          info.appendChild(titleDiv);
+          
+          const buttons = document.createElement('div');
+          buttons.className = 'result-buttons';
+          
+          const btnArray = createInsertButton('\ud83d\udcca Array', item.id, 'DSIQ');
+          const btnLatest = createInsertButton('\ud83d\udcc8 Latest', item.id, 'DSIQ_LATEST');
+          const btnYoy = createInsertButton('\ud83d\udcc9 YoY', item.id, 'DSIQ_YOY');
+          
+          buttons.appendChild(btnArray);
+          buttons.appendChild(btnLatest);
+          buttons.appendChild(btnYoy);
+          
+          li.appendChild(info);
+          li.appendChild(buttons);
           list.appendChild(li);
         });
         container.appendChild(list);
+      }
+      
+      function createInsertButton(label, seriesId, functionName) {
+        const btn = document.createElement('button');
+        btn.className = 'insert-btn';
+        btn.innerText = label;
+        btn.title = `Insert ${functionName} formula`;
+        btn.onclick = () => insertFormula(seriesId, functionName);
+        return btn;
+      }
+      
+      function insertFormula(seriesId, functionName) {
+        google.script.run
+          .withSuccessHandler(() => {
+            document.getElementById('status-banner').innerText = `Inserted ${functionName}(\"${seriesId}\")`;
+            setTimeout(() => refreshStatus(), 2000);
+          })
+          .withFailureHandler(showError)
+          .insertFormulaIntoActiveCell(seriesId, functionName);
       }
 
       function showError(err) {

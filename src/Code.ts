@@ -115,6 +115,17 @@ function showSidebar() {
 }
 
 /**
+ * Required for Google Workspace Marketplace add-on.
+ * Returns a card shown when the add-on is opened from the homepage.
+ */
+function onHomepage() {
+  showSidebar();
+  return CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle('DataSetIQ for Google Sheets'))
+    .build();
+}
+
+/**
  * Custom function: returns spill array with headers, sorted newest to oldest.
  */
 function DSIQ(seriesId: string, frequency?: string | null, startDate?: any) {
